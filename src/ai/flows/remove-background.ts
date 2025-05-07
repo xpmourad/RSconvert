@@ -43,7 +43,7 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
         model: 'googleai/gemini-2.0-flash-exp', 
         prompt: [
           {media: {url: input.imageUrl}},
-          {text: 'Your task is to segment the main subject from this image and replace the background with a solid white color (hex #FFFFFF). Ensure the output is only the processed image of the subject against this solid white background, with no transparency.'}
+          {text: 'Your task is to segment the main subject from this image and make the background transparent. Ensure the output is only the processed image of the subject with a transparent background. The output image should be in a format that supports transparency, like PNG.'}
         ],
         config: {
           responseModalities: ['TEXT', 'IMAGE'], 
@@ -84,7 +84,13 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
                 message = "Non-Error object thrown in flow, and it could not be stringified.";
             }
         }
-        throw new Error(`AI Flow Error: ${message}`);
+        // Prepend a more specific error message for API key issues.
+        if (message.includes('API key') || message.includes('GEMINI_API_KEY') || message.includes('GOOGLE_API_KEY')) {
+          message = `API Key Error: ${message}. Please ensure your GEMINI_API_KEY is correctly set in your .env file and the server is restarted.`;
+        } else {
+          message = `AI Flow Error: ${message}`;
+        }
+        throw new Error(message);
     }
   }
 );
