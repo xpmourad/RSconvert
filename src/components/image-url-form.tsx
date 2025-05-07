@@ -1,8 +1,8 @@
 // src/components/image-url-form.tsx
 'use client';
 
-import { useEffect } from 'react';
-import { useFormState, useFormStatus } from 'react-dom';
+import { useEffect, useActionState } from 'react'; // Updated import
+import { useFormStatus } from 'react-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -92,8 +92,8 @@ function ProcessFileSubmitButton() {
 }
 
 export default function ImageUrlForm({ onImageProcessed }: ImageUrlFormProps) {
-  const [urlFormState, urlFormAction] = useFormState(processImageUrlAction, initialFormState);
-  const [fileUploadFormState, fileUploadFormAction] = useFormState(processImageUploadAction, initialFormState);
+  const [urlFormState, urlFormAction] = useActionState(processImageUrlAction, initialFormState); // Updated usage
+  const [fileUploadFormState, fileUploadFormAction] = useActionState(processImageUploadAction, initialFormState); // Updated usage
   const { toast } = useToast();
 
   useFormProcessingEffect(urlFormState, toast, onImageProcessed, 'URL');
