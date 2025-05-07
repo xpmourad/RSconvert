@@ -14,7 +14,7 @@ import {z} from 'genkit';
 const RemoveBackgroundFromImageUrlInputSchema = z.object({
   imageUrl: z
     .string()
-    .describe("A URL of an image to remove the background from."),
+    .describe("An image URL or a data URI (e.g., 'data:image/png;base64,...') to remove the background from."),
 });
 export type RemoveBackgroundFromImageUrlInput = z.infer<typeof RemoveBackgroundFromImageUrlInputSchema>;
 
@@ -33,7 +33,7 @@ const prompt = ai.definePrompt({
   name: 'removeBackgroundFromImageUrlPrompt',
   input: {schema: RemoveBackgroundFromImageUrlInputSchema},
   output: {schema: RemoveBackgroundFromImageUrlOutputSchema},
-  prompt: `Remove the background from the image at the following URL and return the image as a data URI:
+  prompt: `Remove the background from the image provided via the URL or data URI and return the image as a data URI:
 
 {{media url=imageUrl}}
 `,
@@ -60,3 +60,4 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
     return {backgroundRemovedDataUri: media.url!};
   }
 );
+
