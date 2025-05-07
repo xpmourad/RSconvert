@@ -29,16 +29,6 @@ export async function removeBackgroundFromImageUrl(input: RemoveBackgroundFromIm
   return removeBackgroundFromImageUrlFlow(input);
 }
 
-const prompt = ai.definePrompt({
-  name: 'removeBackgroundFromImageUrlPrompt',
-  input: {schema: RemoveBackgroundFromImageUrlInputSchema},
-  output: {schema: RemoveBackgroundFromImageUrlOutputSchema},
-  prompt: `Remove the background from the image provided via the URL or data URI and return the image as a data URI:
-
-{{media url=imageUrl}}
-`,
-});
-
 const removeBackgroundFromImageUrlFlow = ai.defineFlow(
   {
     name: 'removeBackgroundFromImageUrlFlow',
@@ -46,18 +36,34 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
     outputSchema: RemoveBackgroundFromImageUrlOutputSchema,
   },
   async input => {
-    const {media} = await ai.generate({
+    console.log(`Starting background removal for image (first 100 chars): ${input.imageUrl.substring(0, 100)}...`);
+    
+    const {media, text} = await ai.generate({
       // IMPORTANT: ONLY the googleai/gemini-2.0-flash-exp model is able to generate images. You MUST use exactly this model to generate images.
-      model: 'googleai/gemini-2.0-flash-exp',
-
-      // simple prompt
-      prompt: [{media: {url: input.imageUrl}}, {text: 'Remove the background from this image'}],
-
+      model: 'googleai/gemini-2.0-flash-exp', 
+      prompt: [
+        {media: {url: input.imageUrl}},
+        // Refined and more explicit prompt for background removal
+        {text: 'Your task is to segment the main subject from this image and make the background transparent. Output only the processed image of the subject against a transparent background.'}
+      ],
       config: {
-        responseModalities: ['TEXT', 'IMAGE'], // MUST provide both TEXT and IMAGE, IMAGE only won't work
+        // As per Genkit docs for image generation with gemini-2.0-flash-exp:
+        // "MUST provide both TEXT and IMAGE, IMAGE only won't work"
+        responseModalities: ['TEXT', 'IMAGE'], 
       },
     });
-    return {backgroundRemovedDataUri: media.url!};
+
+    // Log the text response from the AI for debugging purposes
+    console.log('Background removal - AI text response:', text);
+
+    if (!media || !media.url) {
+      const errorMessage = `AI model did not return an image for background removal. Diagnostic text from AI: "${text || 'No text response.'}"`;
+      console.error(errorMessage);
+      // This error will be caught by the calling action and displayed to the user
+      throw new Error(errorMessage);
+    }
+    
+    console.log(`Background removal successful. Media URL (first 100 chars): ${media.url.substring(0,100)}`);
+    return {backgroundRemovedDataUri: media.url};
   }
 );
-
