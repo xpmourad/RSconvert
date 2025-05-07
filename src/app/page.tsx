@@ -1,11 +1,12 @@
+
 'use client';
 
-import { useState, useCallback } from 'react'; // Added useCallback
+import { useState, useCallback } from 'react';
 import ImageUrlForm from '@/components/image-url-form';
 import ImageGrid from '@/components/image-grid';
 import type { ImageItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Github, Palette } from 'lucide-react';
+import { Github, Palette, Trash2 } from 'lucide-react'; // Added Trash2
 
 
 export default function Home() {
@@ -13,13 +14,18 @@ export default function Home() {
 
   const handleImageProcessed = useCallback((newImage: ImageItem) => {
     setImages((prevImages) => {
-      // Prevent adding duplicate IDs, though the primary fix is in ImageUrlForm
+      // Prevent adding duplicate IDs
       if (prevImages.some(img => img.id === newImage.id)) {
+        console.warn(`Attempted to add duplicate image ID: ${newImage.id}`);
         return prevImages;
       }
       return [newImage, ...prevImages];
     });
-  }, []); // Empty dependency array because setImages is stable
+  }, []); 
+
+  const handleClearImages = () => {
+    setImages([]);
+  };
 
   // Placeholder function for theme toggle - actual implementation would need more setup
   const toggleTheme = () => {
@@ -58,6 +64,14 @@ export default function Home() {
         </section>
 
         <section>
+          {images.length > 0 && (
+            <div className="flex justify-end mb-4">
+              <Button variant="outline" onClick={handleClearImages}>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Clear All Images
+              </Button>
+            </div>
+          )}
           <ImageGrid images={images} />
         </section>
       </main>
