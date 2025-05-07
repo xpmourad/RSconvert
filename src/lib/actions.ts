@@ -7,19 +7,45 @@ import type { ActionResultState } from '@/lib/types';
 
 const ImageUrlSchema = z.string().url({ message: "Invalid URL format. Please enter a valid image URL." });
 
+function extractErrorMessage(error: unknown): string {
+  let finalErrorMessage = 'An unexpected error occurred during background removal.';
+  if (error instanceof Error) {
+      finalErrorMessage = error.message;
+  } else if (typeof error === 'string') {
+      finalErrorMessage = error;
+  } else {
+      try {
+          const gError = error as any;
+          if (gError && gError.message) {
+              finalErrorMessage = String(gError.message);
+          } else if (gError && gError.details) {
+               finalErrorMessage = String(gError.details);
+          } else if (gError && typeof gError.toString === 'function' && gError.toString() !== '[object Object]') {
+              finalErrorMessage = gError.toString();
+          }
+          else {
+              finalErrorMessage = 'An unknown error structure was caught.';
+          }
+      } catch (e) {
+          finalErrorMessage = 'Caught a non-standard error that could not be processed.';
+      }
+  }
+  return finalErrorMessage;
+}
+
 export async function processImageUrlAction(
-  prevState: ActionResultState, // prevState is not used but required by useFormState
+  prevState: ActionResultState, 
   formData: FormData
 ): Promise<ActionResultState> {
   const imageUrl = formData.get('imageUrl') as string;
-  const uniqueId = crypto.randomUUID();
+  const uniqueId = prevState?.id || crypto.randomUUID(); // Use previous ID if available for retry, else new
 
   const validatedFields = ImageUrlSchema.safeParse(imageUrl);
 
   if (!validatedFields.success) {
     return {
-      id: uniqueId, // Include ID even on validation error for consistency if needed by UI
-      originalUrl: typeof imageUrl === 'string' ? imageUrl : undefined, // Store what was submitted
+      id: uniqueId,
+      originalUrl: typeof imageUrl === 'string' ? imageUrl : undefined,
       error: validatedFields.error.flatten().formErrors.join(', '),
       processedUrl: null,
     };
@@ -44,7 +70,7 @@ export async function processImageUrlAction(
     }
   } catch (error) {
     console.error('Error processing image from URL:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during background removal.';
+    const errorMessage = extractErrorMessage(error);
     return {
       id: uniqueId,
       originalUrl: validatedFields.data,
@@ -71,11 +97,11 @@ const ImageFileSchema = z
 
 
 export async function processImageUploadAction(
-  prevState: ActionResultState, // prevState is not used but required by useFormState
+  prevState: ActionResultState, 
   formData: FormData
 ): Promise<ActionResultState> {
   const imageFile = formData.get('imageFile');
-  const uniqueId = crypto.randomUUID();
+  const uniqueId = prevState?.id || crypto.randomUUID(); // Use previous ID if available for retry, else new
   
   const validatedFile = ImageFileSchema.safeParse(imageFile);
 
@@ -110,7 +136,7 @@ export async function processImageUploadAction(
     if (result.backgroundRemovedDataUri) {
       return {
         id: uniqueId,
-        originalUrl: originalDataUri, // Send the original image data URI for display
+        originalUrl: originalDataUri, 
         processedUrl: result.backgroundRemovedDataUri,
         error: null,
       };
@@ -124,7 +150,7 @@ export async function processImageUploadAction(
     }
   } catch (error) {
     console.error('Error processing uploaded image:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred during background removal.';
+    const errorMessage = extractErrorMessage(error);
     return {
       id: uniqueId,
       originalUrl: originalDataUri,

@@ -40,27 +40,21 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
     
     try {
       const {media, text} = await ai.generate({
-        // IMPORTANT: ONLY the googleai/gemini-2.0-flash-exp model is able to generate images. You MUST use exactly this model to generate images.
         model: 'googleai/gemini-2.0-flash-exp', 
         prompt: [
           {media: {url: input.imageUrl}},
-          // Refined prompt to explicitly ask for a white background
-          {text: 'Your task is to segment the main subject from this image and replace the background with a solid white color. Output only the processed image of the subject against a solid white background.'}
+          {text: 'Your task is to segment the main subject from this image and replace the background with a solid white color (hex #FFFFFF). Ensure the output is only the processed image of the subject against this solid white background, with no transparency.'}
         ],
         config: {
-          // As per Genkit docs for image generation with gemini-2.0-flash-exp:
-          // "MUST provide both TEXT and IMAGE, IMAGE only won't work"
           responseModalities: ['TEXT', 'IMAGE'], 
         },
       });
 
-      // Log the text response from the AI for debugging purposes
       console.log('Background removal - AI text response:', text);
 
       if (!media || !media.url) {
         const errorMessage = `AI model did not return an image for background removal. Diagnostic text from AI: "${text || 'No text response.'}"`;
         console.error(errorMessage);
-        // This error will be caught by the calling action and displayed to the user
         throw new Error(errorMessage);
       }
       
@@ -75,16 +69,22 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
         } else if (typeof flowError === 'string') {
             message = flowError;
         } else {
-            // Try to get more info if it's a complex object, but be careful
             try {
-                message = `Non-Error object thrown in flow: ${JSON.stringify(flowError)}`;
+                const gError = flowError as any;
+                if (gError && gError.message) {
+                    message = String(gError.message);
+                } else if (gError && gError.details) {
+                    message = String(gError.details);
+                } else if (gError && typeof gError.toString === 'function' && gError.toString() !== '[object Object]') {
+                    message = gError.toString();
+                } else {
+                    message = `Non-Error object thrown in flow: ${JSON.stringify(flowError)}`;
+                }
             } catch (e) {
                 message = "Non-Error object thrown in flow, and it could not be stringified.";
             }
         }
-        // Re-throw as a standard error to be caught by the server action
         throw new Error(`AI Flow Error: ${message}`);
     }
   }
 );
-
