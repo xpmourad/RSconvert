@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react'; // Added useCallback
 import ImageUrlForm from '@/components/image-url-form';
 import ImageGrid from '@/components/image-grid';
 import type { ImageItem } from '@/lib/types';
@@ -11,9 +11,15 @@ import { Github, Palette } from 'lucide-react';
 export default function Home() {
   const [images, setImages] = useState<ImageItem[]>([]);
 
-  const handleImageProcessed = (newImage: ImageItem) => {
-    setImages((prevImages) => [newImage, ...prevImages]);
-  };
+  const handleImageProcessed = useCallback((newImage: ImageItem) => {
+    setImages((prevImages) => {
+      // Prevent adding duplicate IDs, though the primary fix is in ImageUrlForm
+      if (prevImages.some(img => img.id === newImage.id)) {
+        return prevImages;
+      }
+      return [newImage, ...prevImages];
+    });
+  }, []); // Empty dependency array because setImages is stable
 
   // Placeholder function for theme toggle - actual implementation would need more setup
   const toggleTheme = () => {

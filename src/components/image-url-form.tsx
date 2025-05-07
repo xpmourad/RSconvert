@@ -1,7 +1,7 @@
 // src/components/image-url-form.tsx
 'use client';
 
-import { useEffect, useActionState } from 'react'; // Updated import
+import { useEffect, useActionState, useState, useCallback } from 'react'; // Updated import
 import { useFormStatus } from 'react-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -29,10 +29,18 @@ function useFormProcessingEffect(
   formState: ActionResultState | undefined,
   toastHook: ReturnType<typeof useToast>['toast'],
   onImageProcessedCallback: (image: ImageItem) => void,
-  formTypeLabel: 'URL' | 'Upload' // For potentially customizing messages
+  formTypeLabel: 'URL' | 'Upload',
+  processedIds: Set<string>, 
+  addProcessedId: (id: string) => void
 ) {
   useEffect(() => {
-    if (!formState || !formState.id) return; // Only act if formState has an ID (meaning a submission happened)
+    if (!formState || !formState.id) return; 
+
+    if (processedIds.has(formState.id)) { // Check if already processed
+      return;
+    }
+
+    let effectProcessedThisId = false;
 
     if (formState.error) {
       toastHook({
@@ -41,6 +49,7 @@ function useFormProcessingEffect(
         description: formState.error,
         icon: <AlertCircle className="h-5 w-5 text-destructive-foreground" />,
       });
+      effectProcessedThisId = true;
     } else if (formState.originalUrl && formState.processedUrl) {
       toastHook({
         title: 'Success!',
@@ -51,16 +60,33 @@ function useFormProcessingEffect(
         id: formState.id,
         originalUrl: formState.originalUrl,
         processedUrl: formState.processedUrl,
+        error: null, // Explicitly set error to null on success
       });
+      effectProcessedThisId = true;
     } else if (formState.originalUrl && !formState.processedUrl && !formState.error) {
+       // This case implies the action completed, set originalUrl, but neither processedUrl nor error.
+       // This might indicate an unexpected state from the action, or that the action decided not to process.
        toastHook({
         variant: 'destructive',
         title: `${formTypeLabel} Processing Incomplete`,
-        description: 'AI processing did not return a result. Please try another image or method.',
+        description: 'AI processing did not return a result or encountered an issue. Please try another image or method.',
         icon: <AlertCircle className="h-5 w-5 text-destructive-foreground" />,
       });
+      // Optionally, add to grid with an error if this state is meaningful
+      // onImageProcessedCallback({
+      //   id: formState.id,
+      //   originalUrl: formState.originalUrl,
+      //   processedUrl: null,
+      //   error: 'AI processing did not return a result.',
+      // });
+      effectProcessedThisId = true;
     }
-  }, [formState, toastHook, onImageProcessedCallback, formTypeLabel]);
+
+    if (effectProcessedThisId) {
+      addProcessedId(formState.id);
+    }
+
+  }, [formState, toastHook, onImageProcessedCallback, formTypeLabel, processedIds, addProcessedId]);
 }
 
 
@@ -92,12 +118,39 @@ function ProcessFileSubmitButton() {
 }
 
 export default function ImageUrlForm({ onImageProcessed }: ImageUrlFormProps) {
-  const [urlFormState, urlFormAction] = useActionState(processImageUrlAction, initialFormState); // Updated usage
-  const [fileUploadFormState, fileUploadFormAction] = useActionState(processImageUploadAction, initialFormState); // Updated usage
+  const [urlFormState, urlFormAction, isUrlFormPending] = useActionState(processImageUrlAction, initialFormState); 
+  const [fileUploadFormState, fileUploadFormAction, isFileFormPending] = useActionState(processImageUploadAction, initialFormState); 
   const { toast } = useToast();
 
-  useFormProcessingEffect(urlFormState, toast, onImageProcessed, 'URL');
-  useFormProcessingEffect(fileUploadFormState, toast, onImageProcessed, 'Upload');
+  const [processedUrlFormIds, setProcessedUrlFormIds] = useState(new Set<string>());
+  const [processedFileFormIds, setProcessedFileFormIds] = useState(new Set<string>());
+
+  const addProcessedUrlFormId = useCallback((id: string) => {
+    setProcessedUrlFormIds(prev => new Set(prev).add(id));
+  }, []);
+
+  const addProcessedFileFormId = useCallback((id: string) => {
+    setProcessedFileFormIds(prev => new Set(prev).add(id));
+  }, []);
+
+  useFormProcessingEffect(urlFormState, toast, onImageProcessed, 'URL', processedUrlFormIds, addProcessedUrlFormId);
+  useFormProcessingEffect(fileUploadFormState, toast, onImageProcessed, 'Upload', processedFileFormIds, addProcessedFileFormId);
+  
+  // Reset form-specific error display when pending state changes (new submission starts)
+  useEffect(() => {
+    if (isUrlFormPending && urlFormState?.id) {
+       // If a new submission starts, we might want to clear old specific errors from display,
+       // but the formState itself (which holds the error) is managed by useActionState.
+       // The processedIds logic will prevent re-processing the *previous* state.
+    }
+  }, [isUrlFormPending, urlFormState?.id]);
+
+  useEffect(() => {
+    if (isFileFormPending && fileUploadFormState?.id) {
+      // Similar logic for file form
+    }
+  }, [isFileFormPending, fileUploadFormState?.id]);
+
 
   return (
     <Card className="w-full max-w-2xl mx-auto shadow-xl">
@@ -119,7 +172,8 @@ export default function ImageUrlForm({ onImageProcessed }: ImageUrlFormProps) {
               required
               className="focus:ring-accent focus:border-accent mt-1"
             />
-            {urlFormState?.error && urlFormState?.id && ( // Show error only if submission happened
+            {/* Display error from the latest URL form submission if it's not pending and has an error message */}
+            {urlFormState?.error && urlFormState?.id && !isUrlFormPending && (
               <p className="text-sm text-destructive flex items-center mt-1"><AlertCircle className="w-4 h-4 mr-1" /> {urlFormState.error}</p>
             )}
           </div>
@@ -142,7 +196,8 @@ export default function ImageUrlForm({ onImageProcessed }: ImageUrlFormProps) {
               className="mt-1 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border file:border-input file:bg-background file:text-sm file:font-medium file:text-foreground hover:file:bg-accent hover:file:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             />
              <p className="text-xs text-muted-foreground mt-1">Max 5MB. Supported formats: PNG, JPG, JPEG, WEBP.</p>
-            {fileUploadFormState?.error && fileUploadFormState?.id && ( // Show error only if submission happened
+            {/* Display error from the latest File form submission if it's not pending and has an error message */}
+            {fileUploadFormState?.error && fileUploadFormState?.id && !isFileFormPending && (
               <p className="text-sm text-destructive flex items-center mt-1"><AlertCircle className="w-4 h-4 mr-1" /> {fileUploadFormState.error}</p>
             )}
           </div>
