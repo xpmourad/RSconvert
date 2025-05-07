@@ -43,8 +43,8 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
       model: 'googleai/gemini-2.0-flash-exp', 
       prompt: [
         {media: {url: input.imageUrl}},
-        // Refined and more explicit prompt for background removal
-        {text: 'Your task is to segment the main subject from this image and make the background transparent. Output only the processed image of the subject against a transparent background.'}
+        // Refined prompt: segment main subject, replace background with solid white.
+        {text: 'Your task is to segment the main subject from this image and replace the background with a solid white color. Output only the processed image of the subject against a solid white background.'}
       ],
       config: {
         // As per Genkit docs for image generation with gemini-2.0-flash-exp:
