@@ -1,37 +1,88 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import ImageUrlForm from '@/components/image-url-form';
 import ImageGrid from '@/components/image-grid';
 import type { ImageItem } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Github, Palette, Trash2 } from 'lucide-react'; // Added Trash2
+import { Github, Palette, Trash2, Copy, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+// Debounce function
+function debounce<T extends (...args: any[]) => any>(func: T, delay: number) {
+  let timeoutId: ReturnType<typeof setTimeout>;
+  return function(this: ThisParameterType<T>, ...args: Parameters<T>) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => func.apply(this, args), delay);
+  };
+}
 
 
 export default function Home() {
   const [images, setImages] = useState<ImageItem[]>([]);
+  const [processedImageIds, setProcessedImageIds] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+
 
   const handleImageProcessed = useCallback((newImage: ImageItem) => {
     setImages((prevImages) => {
-      // Prevent adding duplicate IDs
-      if (prevImages.some(img => img.id === newImage.id)) {
-        console.warn(`Attempted to add duplicate image ID: ${newImage.id}`);
-        return prevImages;
+      if (processedImageIds.has(newImage.id)) {
+         const existingImageIndex = prevImages.findIndex(img => img.id === newImage.id);
+         if (existingImageIndex !== -1) {
+           const updatedImages = [...prevImages];
+           updatedImages[existingImageIndex] = newImage;
+           return updatedImages;
+         }
       }
-      return [newImage, ...prevImages];
+      setProcessedImageIds(prevIds => new Set(prevIds).add(newImage.id));
+      return [newImage, ...prevImages.filter(img => img.id !== newImage.id)]; 
     });
-  }, []); 
+  }, [processedImageIds]);
+
 
   const handleClearImages = () => {
     setImages([]);
+    setProcessedImageIds(new Set());
   };
 
-  // Placeholder function for theme toggle - actual implementation would need more setup
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const isDark = document.documentElement.classList.contains('dark');
+    setDarkMode(isDark);
+  }, []);
+
   const toggleTheme = () => {
-    document.documentElement.classList.toggle('dark');
+    const isCurrentlyDark = document.documentElement.classList.contains('dark');
+    if (isCurrentlyDark) {
+      document.documentElement.classList.remove('dark');
+      setDarkMode(false);
+    } else {
+      document.documentElement.classList.add('dark');
+      setDarkMode(true);
+    }
   };
 
+  const handleCopyRepoUrl = async () => {
+    try {
+      await navigator.clipboard.writeText('https://github.com/firebase/studio-examples');
+      toast({
+        title: "Copied to clipboard!",
+        description: "Repository URL has been copied.",
+        icon: <CheckCircle2 className="h-5 w-5 text-primary" />,
+      });
+    } catch (err) {
+      console.error('Failed to copy repository URL: ', err);
+      toast({
+        variant: "destructive",
+        title: "Failed to copy",
+        description: "Could not copy the repository URL to clipboard.",
+        icon: <AlertCircle className="h-5 w-5 text-destructive-foreground" />,
+      });
+    }
+  };
+  
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -48,6 +99,9 @@ export default function Home() {
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
               <Palette className="h-5 w-5" />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleCopyRepoUrl} aria-label="Copy repository URL to clipboard">
+              <Copy className="h-5 w-5" />
             </Button>
             <Button variant="ghost" size="icon" asChild>
               <a href="https://github.com/firebase/studio-examples" target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub">
