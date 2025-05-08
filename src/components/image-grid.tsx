@@ -25,22 +25,44 @@ export default function ImageGrid({ images }: ImageGridProps) {
     const link = document.createElement('a');
     link.href = dataUrl;
 
-    // Try to get a filename from originalUrl or default
-    let fileName = 'image-bg-removed.png';
+    let baseName = 'image';
+    // The processed image is expected to be PNG due to background removal (transparency support)
+    const processedExtension = 'png';
+
     try {
-      const urlParts = originalUrl.split('/');
-      const originalFileNameWithExt = urlParts.pop();
-      if (originalFileNameWithExt) {
-        const nameParts = originalFileNameWithExt.split('.');
-        if (nameParts.length > 1) nameParts.pop(); // remove original extension
-        fileName = `${nameParts.join('.')}-bg-removed.png`; // add new extension
+      if (originalUrl.startsWith('data:')) {
+        // Attempt to parse MIME type from data URI to get original type for naming
+        const mimeMatch = originalUrl.match(/^data:(image\/[^;]+);base64,/);
+        let originalFileType = 'unknown';
+        if (mimeMatch && mimeMatch[1]) {
+          originalFileType = mimeMatch[1].split('/')[1] || 'unknown';
+        }
+        baseName = `uploaded_image_${originalFileType}`;
+      } else {
+        // Attempt to parse filename from URL
+        const url = new URL(originalUrl);
+        const pathParts = url.pathname.split('/');
+        const lastPart = pathParts.pop(); // e.g., "filename.jpg" or "filename"
+        if (lastPart) {
+          const nameParts = lastPart.split('.');
+          if (nameParts.length > 1) {
+            nameParts.pop(); // Remove original extension from baseName parts
+          }
+          if (nameParts.length > 0) {
+            baseName = nameParts.join('.');
+          } else if (lastPart) {
+            baseName = lastPart; // Use full lastPart if no extension was found
+          }
+        }
       }
     } catch (e) {
-      // fallback to default if parsing fails
-      console.warn("Could not parse original filename, using default.", e);
+      console.warn("Could not parse original filename or URL, using default name.", e);
+      baseName = 'image'; // Fallback baseName
     }
     
-    link.download = fileName;
+    const finalFileName = `${baseName}-bg-removed.${processedExtension}`;
+    
+    link.download = finalFileName;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -49,7 +71,7 @@ export default function ImageGrid({ images }: ImageGridProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 p-4 md:p-6">
       {images.map((item) => (
-        <Card key={item.id} className="overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 ease-in-out animate-fadeIn flex flex-col">
+        <Card key={item.id} className="overflow-hidden shadow-lg hover:shadow-xl transition-shadow duration-300 ease-in-out flex flex-col">
           <CardHeader>
             <CardTitle className="text-lg truncate">Image ID: {item.id.substring(0,8)}</CardTitle>
             {item.error && <CardDescription className="text-destructive">{item.error}</CardDescription>}
@@ -61,10 +83,10 @@ export default function ImageGrid({ images }: ImageGridProps) {
                 <Image
                   src={item.originalUrl}
                   alt="Original"
-                  layout="fill"
-                  objectFit="contain"
+                  fill
+                  sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                   data-ai-hint="abstract landscape"
-                  className="transition-opacity duration-500 opacity-0 group-hover:opacity-100"
+                  className="object-contain transition-opacity duration-500 opacity-0 group-hover:opacity-100"
                   onLoadingComplete={(image) => image.classList.remove('opacity-0')}
                 />
               </div>
@@ -72,14 +94,14 @@ export default function ImageGrid({ images }: ImageGridProps) {
             {item.processedUrl && (
               <div>
                 <h3 className="text-md font-semibold mb-2 text-foreground/80">Background Removed</h3>
-                <div className="aspect-video relative rounded-md overflow-hidden bg-white border"> {/* Changed background to white for better transparency visibility */}
+                <div className="aspect-video relative rounded-md overflow-hidden bg-white border">
                   <Image
                     src={item.processedUrl}
                     alt="Background Removed"
-                    layout="fill"
-                    objectFit="contain"
+                    fill
+                    sizes="(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
                     data-ai-hint="portrait studio"
-                    className="transition-opacity duration-500 opacity-0 group-hover:opacity-100"
+                    className="object-contain transition-opacity duration-500 opacity-0 group-hover:opacity-100"
                     onLoadingComplete={(image) => image.classList.remove('opacity-0')}
                   />
                 </div>

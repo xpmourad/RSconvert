@@ -29,6 +29,73 @@ export async function removeBackgroundFromImageUrl(input: RemoveBackgroundFromIm
   return removeBackgroundFromImageUrlFlow(input);
 }
 
+function safeStringifyError(error: unknown): string {
+    if (error instanceof Error) {
+        let msg = error.message;
+        if ((error as any).cause) { // Include cause if present
+            const causeError = (error as any).cause;
+            let causeMsg = "Nested cause: ";
+            if (causeError instanceof Error) {
+                causeMsg += causeError.message;
+            } else if (typeof causeError === 'string') {
+                causeMsg += causeError;
+            } else {
+                try {
+                    causeMsg += JSON.stringify(causeError);
+                } catch (e) {
+                    causeMsg += "Could not stringify nested cause.";
+                }
+            }
+            msg += ` | ${causeMsg}`;
+        }
+        return msg;
+    }
+    if (typeof error === 'string') {
+        return error;
+    }
+    try {
+        const anyError = error as any;
+        if (anyError && typeof anyError.message === 'string') {
+            let msg = anyError.message;
+            if (anyError.cause) {
+                 const causeError = anyError.cause;
+                 let causeMsg = "Nested cause: ";
+                 if (causeError instanceof Error) {
+                     causeMsg += causeError.message;
+                 } else if (typeof causeError === 'string') {
+                     causeMsg += causeError;
+                 } else {
+                     try {
+                         causeMsg += JSON.stringify(causeError);
+                     } catch (e) {
+                         causeMsg += "Could not stringify nested cause.";
+                     }
+                 }
+                 msg += ` | ${causeMsg}`;
+            }
+            return msg;
+        }
+        if (anyError && typeof anyError.details === 'string') { // Common in Google API errors
+            return anyError.details;
+        }
+        // Attempt to get a string representation
+        const str = String(error);
+        if (str !== '[object Object]') {
+            return str;
+        }
+        // Fallback to JSON.stringify for objects, but handle its potential failure
+        try {
+            return JSON.stringify(error);
+        } catch (stringifyError) {
+            return 'Could not stringify error object.';
+        }
+    } catch (e) {
+        // Ultimate fallback
+        return 'An unknown error occurred, and it could not be stringified.';
+    }
+}
+
+
 const removeBackgroundFromImageUrlFlow = ai.defineFlow(
   {
     name: 'removeBackgroundFromImageUrlFlow',
@@ -62,34 +129,18 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
       return {backgroundRemovedDataUri: media.url};
 
     } catch (flowError) {
-        console.error("Error during removeBackgroundFromImageUrlFlow execution:", flowError);
-        let message = "An unexpected error occurred in the AI flow.";
-        if (flowError instanceof Error) {
-            message = flowError.message;
-        } else if (typeof flowError === 'string') {
-            message = flowError;
-        } else {
-            try {
-                const gError = flowError as any;
-                if (gError && gError.message) {
-                    message = String(gError.message);
-                } else if (gError && gError.details) {
-                    message = String(gError.details);
-                } else if (gError && typeof gError.toString === 'function' && gError.toString() !== '[object Object]') {
-                    message = gError.toString();
-                } else {
-                    message = `Non-Error object thrown in flow: ${JSON.stringify(flowError)}`;
-                }
-            } catch (e) {
-                message = "Non-Error object thrown in flow, and it could not be stringified.";
-            }
-        }
-        // Prepend a more specific error message for API key issues.
-        if (message.includes('API key') || message.includes('GEMINI_API_KEY') || message.includes('GOOGLE_API_KEY')) {
-          message = `API Key Error: ${message}. Please ensure your GEMINI_API_KEY is correctly set in your .env file and the server is restarted.`;
+        console.error("Raw error during removeBackgroundFromImageUrlFlow execution:", flowError);
+        let message = safeStringifyError(flowError);
+
+        const apiKeyErrorKeywords = ['API key', 'GEMINI_API_KEY', 'GOOGLE_API_KEY', 'PermissionDenied', 'IAM', 'credentials', 'authentication', 'authorization', 'forbidden'];
+        const isApiKeyError = apiKeyErrorKeywords.some(keyword => message.toLowerCase().includes(keyword.toLowerCase()));
+
+        if (isApiKeyError) {
+          message = `API Key or Permissions Error: ${message}. Please ensure your GEMINI_API_KEY is correctly set in your .env file, the server is restarted, and the key has the necessary permissions for the Gemini API.`;
         } else {
           message = `AI Flow Error: ${message}`;
         }
+        console.error("Final error message being thrown by flow:", message);
         throw new Error(message);
     }
   }
