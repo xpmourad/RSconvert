@@ -9,7 +9,7 @@
  */
 
 import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import {z}from 'genkit';
 
 const RemoveBackgroundFromImageUrlInputSchema = z.object({
   imageUrl: z
@@ -110,7 +110,7 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
         model: 'googleai/gemini-2.0-flash-exp', 
         prompt: [
           {media: {url: input.imageUrl}},
-          {text: 'Your task is to segment the main subject from this image and make the background transparent. Ensure the output is only the processed image of the subject with a transparent background. The output image should be in a format that supports transparency, like PNG.'}
+          {text: 'Critically important: Segment the main subject from the provided image. The background of this image MUST be made completely transparent. Return ONLY the segmented main subject with the transparent background. The output image format must be PNG to preserve transparency. Do not return the original image or an image with the background intact.'}
         ],
         config: {
           responseModalities: ['TEXT', 'IMAGE'], 
