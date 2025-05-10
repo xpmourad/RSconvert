@@ -7,56 +7,33 @@ import type { ActionResultState } from '@/lib/types';
 
 const ImageUrlSchema = z.string().url({ message: "Invalid URL format. Please enter a valid image URL." });
 
-// Refined error extraction
-function extractErrorMessage(error: unknown, defaultMessage: string = 'An unexpected error occurred.'): string {
-  // Server-side logging of the raw error for better debugging
-  console.error("[extractErrorMessage] Attempting to extract error message from:", error);
+// Simplified error message generation for client
+function getClientErrorMessage(error: unknown, actionType: 'URL' | 'File Upload'): string {
+  console.error(`[Action Error - ${actionType}] Raw error:`, error); // Log the full error server-side
 
   if (error instanceof Error) {
-    let msg = error.message;
-    if ((error as any).cause) {
-      const causeError = (error as any).cause;
-      let causeMsg = "Nested cause: ";
-      if (causeError instanceof Error) {
-        causeMsg += causeError.message;
-      } else if (typeof causeError === 'string') {
-        causeMsg += causeError;
-      } else {
-        try {
-          causeMsg += JSON.stringify(causeError);
-        } catch (e) {
-          causeMsg += "Unstringifyable nested cause.";
-        }
-      }
-      msg += ` | ${causeMsg}`;
+    if (error.message.includes('API key') || error.message.includes('PERMISSION_DENIED') || error.message.includes('Failed precondition') || error.message.includes('IAM')) {
+      return 'Error: API key issue (invalid, missing, or lacking permissions). Please verify your GEMINI_API_KEY and its Google Cloud project configuration (e.g., billing, API enabled).';
     }
-    return msg;
+    if (error.message.toLowerCase().includes('candidate was blocked due to safety')) {
+      return 'Error: Image processing was blocked by safety filters. The image might contain content that violates safety policies.';
+    }
+    if (error.message.toLowerCase().includes('user location is not supported')) {
+        return 'Error: Your location is not supported for this AI service. The API may have regional restrictions.';
+    }
+     if (error.message.toLowerCase().includes('model text not found') || error.message.toLowerCase().includes('no media')) {
+        return 'Error: The AI model did not return the expected image data. The input image might be unsuitable or the service is busy. Try a different image or try again later.';
+    }
+    // For other specific errors, provide a less verbose message
+    return `Processing Error: ${error.message.substring(0, 150)}${error.message.length > 150 ? '...' : ''}`;
   }
   if (typeof error === 'string') {
-    return error;
+    if (error.length > 200) return `Processing Error: ${error.substring(0, 200)}...`;
+    return `Processing Error: ${error}`;
   }
-  try {
-    const anyError = error as any;
-    if (anyError && typeof anyError.message === 'string') {
-      return anyError.message;
-    }
-    if (anyError && typeof anyError.details === 'string') { // Common in Google API errors
-      return anyError.details;
-    }
-    const str = String(error);
-    if (str !== '[object Object]' && str.trim() !== '') {
-      return str;
-    }
-    try {
-      const jsonStr = JSON.stringify(error);
-      return jsonStr;
-    } catch (stringifyError) {
-      return defaultMessage + " (Could not stringify error details)";
-    }
-  } catch (e) {
-    return defaultMessage + " (Error processing the error object itself)";
-  }
+  return 'An unexpected error occurred during image processing. Please check server logs or try again later.';
 }
+
 
 export async function processImageUrlAction(
   prevState: ActionResultState, 
@@ -97,12 +74,11 @@ export async function processImageUrlAction(
       };
     }
   } catch (error) {
-    console.error(`[Action: ${uniqueId}] Error processing image from URL '${validatedFields.data.substring(0,100)}...':`, error);
-    const errorMessage = extractErrorMessage(error, 'Failed to process image due to an internal server error.');
+    const clientErrorMessage = getClientErrorMessage(error, 'URL');
     return {
       id: uniqueId,
       originalUrl: validatedFields.data,
-      error: `Error: ${errorMessage}`,
+      error: clientErrorMessage,
       processedUrl: null,
     };
   }
@@ -112,7 +88,7 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 
 const ImageFileSchema = z
-  .instanceof(File)
+  .instanceof(File, { message: "No file provided or invalid file type."})
   .refine((file) => file.size > 0, "File is empty.")
   .refine(
     (file) => file.size <= MAX_FILE_SIZE,
@@ -134,14 +110,22 @@ export async function processImageUploadAction(
   let originalInputContext = 'Uploaded file';
   if (imageFile instanceof File && imageFile.name) {
     originalInputContext = imageFile.name;
+  } else if (!(imageFile instanceof File)) {
+     return {
+      id: uniqueId,
+      originalUrl: 'No file selected',
+      error: 'Please select an image file to upload.',
+      processedUrl: null,
+    };
   }
+
 
   const validatedFile = ImageFileSchema.safeParse(imageFile);
 
   if (!validatedFile.success) {
     return {
       id: uniqueId,
-      originalUrl: originalInputContext,
+      originalUrl: originalInputContext, // Use file name if available, even if validation fails
       error: validatedFile.error.flatten().formErrors.join(', '),
       processedUrl: null,
     };
@@ -156,11 +140,11 @@ export async function processImageUploadAction(
     const buffer = Buffer.from(arrayBuffer);
     originalDataUri = `data:${file.type};base64,${buffer.toString('base64')}`;
   } catch (error) {
-    console.error(`[Action: ${uniqueId}] Error converting file to data URI for ${originalInputContext}:`, error);
+    console.error(`[Action: ${uniqueId}] Error converting file ${originalInputContext} to data URI:`, error);
     return {
       id: uniqueId,
       originalUrl: originalInputContext,
-      error: 'Failed to read the uploaded file. It might be corrupted or too large for buffer conversion.',
+      error: 'Failed to read the uploaded file. It might be corrupted.',
       processedUrl: null,
     };
   }
@@ -186,13 +170,13 @@ export async function processImageUploadAction(
       };
     }
   } catch (error) {
-    console.error(`[Action: ${uniqueId}] Error processing uploaded image ${originalInputContext}:`, error);
-    const errorMessage = extractErrorMessage(error, 'Failed to process uploaded image due to an internal server error.');
+    const clientErrorMessage = getClientErrorMessage(error, 'File Upload');
     return {
       id: uniqueId,
       originalUrl: originalDataUri,
-      error: `Error: ${errorMessage}`,
+      error: clientErrorMessage,
       processedUrl: null,
     };
   }
 }
+
