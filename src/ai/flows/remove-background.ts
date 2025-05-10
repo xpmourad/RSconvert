@@ -110,10 +110,23 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
         model: 'googleai/gemini-2.0-flash-exp', 
         prompt: [
           {media: {url: input.imageUrl}},
-          {text: 'Critically important: Segment the main subject from the provided image. The background of this image MUST be made completely transparent. Return ONLY the segmented main subject with the transparent background. The output image format must be PNG to preserve transparency. Do not return the original image or an image with the background intact.'}
+          {text: 
+`Your primary task is to remove the background from the provided image.
+The main subject(s) of the image must be preserved.
+The area that was previously the background must be made fully transparent.
+The output image must be in PNG format to support transparency.
+Do not replace the background with a color or pattern; it must be transparent.
+Return only the image with the background removed and made transparent.`
+          }
         ],
         config: {
-          responseModalities: ['TEXT', 'IMAGE'], 
+          responseModalities: ['TEXT', 'IMAGE'],
+           safetySettings: [ // Added safety settings to be less restrictive for typical image edits
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+           ],
         },
       });
 
@@ -125,6 +138,13 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
         throw new Error(errorMessage);
       }
       
+      // Check if the returned media URL is a PNG data URI, which is expected for transparency
+      if (!media.url.startsWith('data:image/png;base64,')) {
+          console.warn(`AI model returned an image but it might not be a PNG with transparency. URL (first 100): ${media.url.substring(0,100)}. AI Text: "${text || 'No text response.'}"`);
+          // Depending on strictness, you could throw an error here or proceed cautiously.
+          // For now, let's proceed but log a warning.
+      }
+
       console.log(`Background removal successful. Media URL (first 100 chars): ${media.url.substring(0,100)}`);
       return {backgroundRemovedDataUri: media.url};
 
@@ -137,7 +157,10 @@ const removeBackgroundFromImageUrlFlow = ai.defineFlow(
 
         if (isApiKeyError) {
           message = `API Key or Permissions Error: ${message}. Please ensure your GEMINI_API_KEY is correctly set in your .env file, the server is restarted, and the key has the necessary permissions for the Gemini API.`;
-        } else {
+        } else if (message.toLowerCase().includes('candidate was blocked due to safety')) {
+            message = `Image processing was blocked by safety filters. The image might contain content that violates safety policies. Diagnostic text from AI: "${(flowError as any)?.cause?.message || (flowError as any)?.message || 'No specific details.'}"`;
+        }
+        else {
           message = `AI Flow Error: ${message}`;
         }
         console.error("Final error message being thrown by flow:", message);
