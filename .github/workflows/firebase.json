@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "610018368088",
+    "firebase_url": "https://image-streamer-f3i73-default-rtdb.firebaseio.com",
+    "project_id": "image-streamer-f3i73",
+    "storage_bucket": "image-streamer-f3i73.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:610018368088:android:47a7358a976d660482082d",
+        "android_client_info": {
+          "package_name": "online.rsconvertimage"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD574F2PeHQRkYgmKAqN44e7wmIa61PGAA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
